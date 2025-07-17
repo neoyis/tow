@@ -53,28 +53,12 @@ df, age_cols = load_data()
 # ---- UI ----
 st.title("2025년 5월 연령별 인구 현황 분석")
 
-st.header("1. 원본 데이터")
-st.dataframe(df, use_container_width=True)
+import folium
+from streamlit_folium import st_folium
 
-st.header("2. 총인구수 상위 5개 행정구역")
-top5 = df.nlargest(5, "총인구수").reset_index(drop=True)
-st.dataframe(top5[["행정구역", "총인구수"]], use_container_width=True)
+st.header("4. 상위 5개 행정구역 지도 (Folium)")
 
-# ---- 선 그래프 ----
-plot_df = top5.set_index("행정구역")[age_cols].T
-plot_df.index = plot_df.index.astype(int)
-plot_df = plot_df.sort_index()
-
-st.header("3. 연령별 인구 분포 (상위 5개 행정구역)")
-st.line_chart(plot_df, use_container_width=True)
-
-st.caption(
-    "※ `st.line_chart`는 기본적으로 연령을 가로축, 인구수를 세로축으로 그립니다. "
-    "요청하신 ‘연령‑세로축 / 인구‑가로축’ 형태는 기본 기능으로는 회전이 어려워 표준 방향으로 시각화했습니다."
-)
-st.header("4. 상위 5개 행정구역 지도 시각화")
-
-# 광역 행정구역 이름 → 위도/경도 수동 매핑
+# 위도/경도 매핑
 location_map = {
     "서울특별시": [37.5665, 126.9780],
     "부산광역시": [35.1796, 129.0756],
@@ -95,12 +79,25 @@ location_map = {
     "제주특별자치도": [33.4996, 126.5312],
 }
 
-# top5 지역에 좌표 추가
-map_df = top5.copy()
-map_df[[\"위도\", \"경도\"]] = map_df[\"행정구역\"].apply(lambda x: pd.Series(location_map.get(x, [None, None])))
+# 지도 준비
+m = folium.Map(location=[36.5, 127.8], zoom_start=6)
 
-# 좌표가 있는 행만 지도에 표시
-valid_map_df = map_df.dropna(subset=[\"위도\", \"경도\"])[[\"위도\", \"경도\"]]
+for _, row in top5.iterrows():
+    name = row["행정구역"]
+    population = row["총인구수"]
+    coord = location_map.get(name)
 
-# 지도 출력
-st.map(valid_map_df, zoom=6)
+    if coord:
+        folium.CircleMarker(
+            location=coord,
+            radius=population / 1000000,  # 인구 수에 따라 반지름 조절
+            color="blue",
+            fill=True,
+            fill_color="skyblue",
+            fill_opacity=0.7,
+            popup=f"{name} ({population:,}명)",
+            tooltip=name,
+        ).add_to(m)
+
+# Streamlit에서 지도 렌더링
+st_data = st_folium(m, width=700, height=500)
